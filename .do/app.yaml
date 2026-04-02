@@ -1,0 +1,23 @@
+name: slack-analytics-dashboard
+services:
+  - name: web
+    dockerfile_path: Dockerfile
+    github:
+      repo: timfalls/slack-analytics-dashboard
+      branch: main
+      deploy_on_push: true
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    routes:
+      - path: /
+    envs:
+      - key: SLACK_BOT_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+      - key: SLACK_CHANNEL_ID
+        scope: RUN_TIME
+        type: SECRET
+      - key: SLACK_SIGNING_SECRET
+        scope: RUN_TIME
+        type: SECRET
