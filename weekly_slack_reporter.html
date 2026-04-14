@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weekly Slack Reporter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e1117;
+    --surface: #161b25;
+    --surface2: #1e2535;
+    --border: #252d3d;
+    --border2: #2f3a50;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --accent: #4ade80;
+    --blue: #38bdf8;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --font-ui: 'DM Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+    --radius: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .app-title {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 0.02em;
+  }
+
+  .version-tag {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+
+  .main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 24px;
+    display: grid;
+    gap: 20px;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .panel-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .panel-body { padding: 16px; }
+
+  /* UPLOAD ZONE */
+  .upload-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  @media (max-width: 600px) { .upload-grid { grid-template-columns: 1fr; } }
+
+  .upload-zone {
+    border: 2px dashed var(--border2);
+    border-radius: var(--radius);
+    padding: 24px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(74, 222, 128, 0.04);
+  }
+
+  .upload-zone.loaded {
+    border-color: var(--accent);
+    border-style: solid;
+    background: rgba(74, 222, 128, 0.06);
+  }
+
+  .upload-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .upload-icon { font-size: 28px; margin-bottom: 8px; }
+
+  .upload-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .upload-hint { font-size: 11px; color: var(--muted); }
+  .upload-filename { font-family: var(--font-mono); font-size: 11px; color: var(--accent); margin-top: 6px; }
+
+  /* MANUAL INPUTS */
+  .manual-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+  }
+
+  .form-field { display: flex; flex-direction: column; gap: 5px; }
+
+  .form-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+
+  .form-label span {
+    font-weight: 400;
+    color: var(--muted);
+    text-transform: none;
+    letter-spacing: 0;
+    margin-left: 4px;
+    font-size: 10px;
+  }
+
+  .form-input {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 5px;
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 13px;
+    padding: 7px 10px;
+    outline: none;
+    transition: border-color 0.15s;
+    width: 100%;
+  }
+
+  .form-input:focus { border-color: var(--accent); }
+  .form-input[type="number"] { font-family: var(--font-mono); }
+
+  textarea.form-input { resize: vertical; min-height: 72px; font-size: 13px; }
+
+  /* GENERATE BUTTON */
+  .generate-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    font-family: var(--font-ui);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 9px 18px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .btn-primary { background: var(--accent); color: #0e1117; border-color: var(--accent); }
+  .btn-primary:hover { opacity: 0.88; }
+  .btn-secondary { background: transparent; color: var(--blue); border-color: #1a3558; }
+  .btn-secondary:hover { background: #0a1a2a; }
+  .btn-ghost { background: transparent; color: var(--muted); border-color: var(--border2); }
+  .btn-ghost:hover { color: var(--text); background: var(--surface2); }
+
+  /* DETECTED DATA */
+  .detected-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .stat-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+
+  .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 3px; }
+  .stat-value { font-family: var(--font-mono); font-size: 20px; font-weight: 500; color: var(--text); }
+  .stat-delta { font-size: 11px; margin-top: 2px; }
+  .stat-delta.pos { color: var(--accent); }
+  .stat-delta.neg { color: var(--red); }
+  .stat-delta.neu { color: var(--muted); }
+
+  /* OUTPUTS */
+  .output-block {
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 14px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    color: var(--text);
+    word-break: break-word;
+  }
+
+  .output-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .output-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+
+  .copy-btn {
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 5px;
+    border: 1px solid var(--border2);
+    background: var(--surface2);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .copy-btn.copied { color: var(--accent); border-color: var(--accent); }
+
+  /* HISTORY */
+  .history-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface2);
+    font-size: 12px;
+  }
+
+  .history-week { font-family: var(--font-mono); color: var(--accent); }
+  .history-stats { color: var(--muted); }
+  .history-del-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 0 4px; }
+  .history-del-btn:hover { color: var(--red); }
+
+  /* TOAST */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    padding: 10px 16px;
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.25s ease;
+    z-index: 1000;
+    max-width: 320px;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  .hidden { display: none; }
+  .divider { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="app-title">Weekly Slack Reporter</span>
+  <span class="version-tag">v2</span>
+</div>
+
+<div class="main">
+
+  <!-- STEP 1: UPLOAD -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Step 1: Upload Exports</span>
+      <span style="font-size:11px;color:var(--muted);">From Slack Analytics for #build-with-winslow</span>
+    </div>
+    <div class="panel-body">
+      <div class="upload-grid">
+        <div class="upload-zone" id="membersZone">
+          <input type="file" accept=".csv" id="membersFile" onchange="handleFile('members', this)">
+          <div class="upload-icon">👥</div>
+          <div class="upload-label">Members CSV</div>
+          <div class="upload-hint">Channel members export</div>
+          <div class="upload-filename" id="membersFilename"></div>
+        </div>
+        <div class="upload-zone" id="channelZone">
+          <input type="file" accept=".csv" id="channelFile" onchange="handleFile('channel', this)">
+          <div class="upload-icon">📊</div>
+          <div class="upload-label">Channel Stats CSV</div>
+          <div class="upload-hint">Channel activity export</div>
+          <div class="upload-filename" id="channelFilename"></div>
+        </div>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin-top:10px;">
+        Go to Slack Analytics, select the #build-with-winslow channel, set the date range to the past week, and export both files.
+        If you only have one export, upload what you have and fill in the rest manually below.
+      </p>
+    </div>
+  </div>
+
+  <!-- STEP 2: MANUAL / OVERRIDE -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Step 2: Review and Fill In</span>
+      <span style="font-size:11px;color:var(--muted);">Auto-filled from CSVs where possible</span>
+    </div>
+    <div class="panel-body">
+      <div class="manual-grid">
+        <div class="form-field">
+          <label class="form-label">Week Of <span>(date)</span></label>
+          <input class="form-input" type="date" id="weekOf">
+        </div>
+        <div class="form-field">
+          <label class="form-label">Total External Members</label>
+          <input class="form-input" type="number" id="totalMembers" placeholder="e.g. 42">
+        </div>
+        <div class="form-field">
+          <label class="form-label">Delta <span>(vs prior week)</span></label>
+          <input class="form-input" type="number" id="delta" placeholder="e.g. +3">
+        </div>
+        <div class="form-field">
+          <label class="form-label">New Members This Week</label>
+          <input class="form-input" type="number" id="newMembers" placeholder="e.g. 4">
+        </div>
+        <div class="form-field">
+          <label class="form-label">Messages Posted</label>
+          <input class="form-input" type="number" id="messagesPosted" placeholder="e.g. 18">
+        </div>
+        <div class="form-field">
+          <label class="form-label">Members Who Posted</label>
+          <input class="form-input" type="number" id="membersPosted" placeholder="e.g. 7">
+        </div>
+        <div class="form-field">
+          <label class="form-label">Members Who Viewed</label>
+          <input class="form-input" type="number" id="membersViewed" placeholder="e.g. 22">
+        </div>
+        <div class="form-field">
+          <label class="form-label">Notes <span>(optional)</span></label>
+          <textarea class="form-input" id="notes" placeholder="Anything worth flagging this week..."></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 3: GENERATE -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Step 3: Generate</span>
+    </div>
+    <div class="panel-body">
+      <div class="generate-row">
+        <button class="btn btn-primary" onclick="generate()">Generate Outputs</button>
+        <button class="btn btn-ghost" onclick="clearForm()">Clear Form</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OUTPUTS -->
+  <div class="panel hidden" id="outputPanel">
+    <div class="panel-header">
+      <span class="panel-title">Outputs</span>
+    </div>
+    <div class="panel-body">
+
+      <!-- STAT CARDS -->
+      <div class="detected-grid" id="statCards"></div>
+
+      <hr class="divider">
+
+      <!-- WEEKLY UPDATE FOR NIEL -->
+      <div class="output-header">
+        <span class="output-title">Weekly Update (paste to Slack)</span>
+        <button class="copy-btn" id="copyUpdateBtn" onclick="copyOutput('slackUpdate', 'copyUpdateBtn')">Copy</button>
+      </div>
+      <div class="output-block" id="slackUpdate"></div>
+
+      <hr class="divider">
+
+      <!-- TRACKER ROW -->
+      <div class="output-header">
+        <span class="output-title">Tracker Row (paste into Community Reporting tab)</span>
+        <button class="copy-btn" id="copyRowBtn" onclick="copyOutput('trackerRow', 'copyRowBtn')">Copy</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">
+        Columns: Week Of | Total Members | Delta | New Members | Messages Posted | Members Posted | Members Viewed | Notes
+      </div>
+      <div class="output-block" id="trackerRow"></div>
+
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="panel" id="historyPanel">
+    <div class="panel-header">
+      <span class="panel-title">Previous Weeks</span>
+      <span style="font-size:11px;color:var(--muted);" id="historyCount"></span>
+    </div>
+    <div class="panel-body">
+      <div id="historyList"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────────────────────────
+const HISTORY_KEY = 'slack_reporter_history_v2';
+const LAST_TOTAL_KEY = 'slack_reporter_last_total';
+
+let history = [];
+
+function loadHistory() {
+  try { history = JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch { history = []; }
+}
+
+function saveHistory() {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+}
+
+// ─── FILE HANDLING ─────────────────────────────────────────────────────────
+function handleFile(type, input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const zone = document.getElementById(type === 'members' ? 'membersZone' : 'channelZone');
+  const fname = document.getElementById(type === 'members' ? 'membersFilename' : 'channelFilename');
+  fname.textContent = file.name;
+  zone.classList.add('loaded');
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    const text = e.target.result;
+    if (type === 'members') parseMembersCSV(text);
+    else parseChannelCSV(text);
+  };
+  reader.readAsText(file);
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g,'').trim().toLowerCase());
+  return lines.slice(1).filter(l => l.trim()).map(line => {
+    const vals = splitCSVLine(line);
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = (vals[i] || '').replace(/^"|"$/g,'').trim(); });
+    return obj;
+  });
+}
+
+function splitCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') { inQuotes = !inQuotes; }
+    else if (ch === ',' && !inQuotes) { result.push(current); current = ''; }
+    else { current += ch; }
+  }
+  result.push(current);
+  return result;
+}
+
+function parseMembersCSV(text) {
+  const rows = parseCSV(text);
+  if (!rows.length) { toast('Could not parse Members CSV.'); return; }
+
+  // Try various column name patterns Slack might use
+  const dateKeys = ['date_joined','datetime_channel_joined','datetime_workspace_joined','joined','member_since'];
+  const nameKeys = ['display_name','full_name','name'];
+
+  // Filter out bots and find date column
+  const dateKey = dateKeys.find(k => rows[0][k] !== undefined) || Object.keys(rows[0]).find(k => k.includes('date') || k.includes('join'));
+  const today = new Date();
+  const weekAgo = new Date(today - 7 * 24 * 60 * 60 * 1000);
+
+  const humanRows = rows.filter(r => {
+    const isBot = r['is_bot'] === 'true' || r['is_bot'] === '1' || r['type'] === 'bot';
+    const isDeleted = r['deleted'] === 'true' || r['is_deleted'] === 'true';
+    return !isBot && !isDeleted;
+  });
+
+  const total = humanRows.length;
+  document.getElementById('totalMembers').value = total;
+
+  // Delta from last stored total
+  const lastTotal = parseInt(localStorage.getItem(LAST_TOTAL_KEY) || '0');
+  if (lastTotal > 0) {
+    document.getElementById('delta').value = total - lastTotal;
+  }
+
+  // New members this week
+  if (dateKey) {
+    const newThisWeek = humanRows.filter(r => {
+      if (!r[dateKey]) return false;
+      const d = new Date(r[dateKey]);
+      return d >= weekAgo;
+    }).length;
+    if (newThisWeek > 0) document.getElementById('newMembers').value = newThisWeek;
+  }
+
+  // Default week-of to today
+  if (!document.getElementById('weekOf').value) {
+    document.getElementById('weekOf').value = today.toISOString().split('T')[0];
+  }
+
+  toast(`Members CSV: detected ${total} members`);
+}
+
+function parseChannelCSV(text) {
+  const rows = parseCSV(text);
+  if (!rows.length) { toast('Could not parse Channel CSV.'); return; }
+
+  // Look for known column patterns
+  const msgKeys = ['messages_posted','total_messages_posted','messages posted','messages'];
+  const postedKeys = ['members_who_posted','members who posted','unique_members_who_posted'];
+  const viewedKeys = ['members_who_viewed','members who viewed','unique_members_who_viewed'];
+  const dateKeys = ['date','week','week_start','period'];
+
+  const findVal = (row, keys) => {
+    for (const k of keys) {
+      if (row[k] !== undefined && row[k] !== '') return row[k];
+    }
+    // Fuzzy search
+    const found = Object.keys(row).find(k => keys.some(pattern => k.includes(pattern.split('_')[0])));
+    return found ? row[found] : '';
+  };
+
+  // Use most recent row if multiple
+  const row = rows[rows.length - 1];
+
+  const msgs = findVal(row, msgKeys);
+  const posted = findVal(row, postedKeys);
+  const viewed = findVal(row, viewedKeys);
+
+  if (msgs) document.getElementById('messagesPosted').value = parseInt(msgs) || '';
+  if (posted) document.getElementById('membersPosted').value = parseInt(posted) || '';
+  if (viewed) document.getElementById('membersViewed').value = parseInt(viewed) || '';
+
+  toast(`Channel CSV: messages=${msgs || '?'}, posted=${posted || '?'}, viewed=${viewed || '?'}`);
+}
+
+// ─── GENERATE ─────────────────────────────────────────────────────────────────
+function generate() {
+  const weekOf      = document.getElementById('weekOf').value;
+  const total       = document.getElementById('totalMembers').value;
+  const delta       = document.getElementById('delta').value;
+  const newMembers  = document.getElementById('newMembers').value;
+  const messages    = document.getElementById('messagesPosted').value;
+  const posted      = document.getElementById('membersPosted').value;
+  const viewed      = document.getElementById('membersViewed').value;
+  const notes       = document.getElementById('notes').value;
+
+  if (!weekOf || !total) {
+    toast('Need at least a date and total member count.');
+    return;
+  }
+
+  const weekLabel = formatDate(weekOf);
+  const deltaNum  = parseInt(delta) || 0;
+  const deltaStr  = deltaNum > 0 ? `+${deltaNum}` : String(deltaNum);
+  const engagement = viewed && total ? Math.round((parseInt(viewed) / parseInt(total)) * 100) : null;
+
+  // SLACK UPDATE
+  const update = `*Build with Winslow: Week of ${weekLabel}*
+
+*Community Size:* ${total} members (${deltaStr} from last week)
+*New Members:* ${newMembers || 0} this week
+*Messages Posted:* ${messages || 0}
+*Members Who Posted:* ${posted || 0}
+*Members Who Viewed:* ${viewed || 0}${engagement !== null ? ` (${engagement}% of community)` : ''}${notes ? `\n\n*Notes:* ${notes}` : ''}`;
+
+  // TRACKER ROW (tab-separated)
+  const row = [weekLabel, total, deltaStr, newMembers || 0, messages || 0, posted || 0, viewed || 0, notes || ''].join('\t');
+
+  // STAT CARDS
+  const cards = [
+    { label: 'Total Members', value: total, delta: deltaStr, dclass: deltaNum > 0 ? 'pos' : deltaNum < 0 ? 'neg' : 'neu' },
+    { label: 'New This Week', value: newMembers || 0 },
+    { label: 'Messages', value: messages || 0 },
+    { label: 'Members Posted', value: posted || 0 },
+    { label: 'Members Viewed', value: viewed || 0 },
+    ...(engagement !== null ? [{ label: 'Engagement', value: `${engagement}%` }] : [])
+  ];
+
+  document.getElementById('statCards').innerHTML = cards.map(c => `
+    <div class="stat-card">
+      <div class="stat-label">${c.label}</div>
+      <div class="stat-value">${c.value}</div>
+      ${c.delta ? `<div class="stat-delta ${c.dclass}">${c.delta} vs prior week</div>` : ''}
+    </div>`).join('');
+
+  document.getElementById('slackUpdate').textContent = update;
+  document.getElementById('trackerRow').textContent = row;
+  document.getElementById('outputPanel').classList.remove('hidden');
+
+  // Save to history
+  const entry = { weekOf, weekLabel, total, delta: deltaStr, newMembers: newMembers || 0, messages: messages || 0, posted: posted || 0, viewed: viewed || 0, notes, generatedAt: new Date().toISOString() };
+  history = [entry, ...history.filter(h => h.weekOf !== weekOf)].slice(0, 20);
+  saveHistory();
+
+  // Store last total for next week's delta
+  localStorage.setItem(LAST_TOTAL_KEY, total);
+
+  renderHistory();
+  toast('Generated. Copy your outputs below.');
+}
+
+// ─── COPY ─────────────────────────────────────────────────────────────────────
+function copyOutput(elementId, btnId) {
+  const text = document.getElementById(elementId).textContent;
+  const btn  = document.getElementById(btnId);
+
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+  });
+}
+
+// ─── HISTORY ──────────────────────────────────────────────────────────────────
+function renderHistory() {
+  const list  = document.getElementById('historyList');
+  const count = document.getElementById('historyCount');
+
+  if (!history.length) {
+    list.innerHTML = '<p style="color:var(--muted);font-size:13px;">No previous weeks yet. Generate a report to start building history.</p>';
+    count.textContent = '';
+    return;
+  }
+
+  count.textContent = `${history.length} week${history.length !== 1 ? 's' : ''}`;
+  list.innerHTML = `<div style="display:grid;gap:8px;">${
+    history.map((h, i) => `
+      <div class="history-item">
+        <span class="history-week">${h.weekLabel || h.weekOf}</span>
+        <span class="history-stats">${h.total} members (${h.delta}) | ${h.messages} msgs | ${h.viewed} viewed</span>
+        <button class="history-del-btn" onclick="removeHistory(${i})" title="Remove">×</button>
+      </div>`).join('')
+  }</div>`;
+}
+
+function removeHistory(i) {
+  history.splice(i, 1);
+  saveHistory();
+  renderHistory();
+}
+
+function clearForm() {
+  ['weekOf','totalMembers','delta','newMembers','messagesPosted','membersPosted','membersViewed','notes'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('membersFilename').textContent = '';
+  document.getElementById('channelFilename').textContent = '';
+  document.getElementById('membersZone').classList.remove('loaded');
+  document.getElementById('channelZone').classList.remove('loaded');
+  document.getElementById('outputPanel').classList.add('hidden');
+  document.getElementById('membersFile').value = '';
+  document.getElementById('channelFile').value = '';
+  toast('Form cleared');
+}
+
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T12:00:00');
+  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ─── DRAG AND DROP ────────────────────────────────────────────────────────────
+['membersZone','channelZone'].forEach(zoneId => {
+  const zone = document.getElementById(zoneId);
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const type = zoneId === 'membersZone' ? 'members' : 'channel';
+    const input = document.getElementById(type === 'members' ? 'membersFile' : 'channelFile');
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    handleFile(type, input);
+  });
+});
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+loadHistory();
+renderHistory();
+document.getElementById('weekOf').value = new Date().toISOString().split('T')[0];
+
+// Pre-populate delta hint from stored last total
+const lastTotal = localStorage.getItem(LAST_TOTAL_KEY);
+if (lastTotal) {
+  document.querySelector('#totalMembers').placeholder = `Last: ${lastTotal}`;
+}
+</script>
+</body>
+</html>
